@@ -44,7 +44,7 @@ jobs:
 
       # 2) Fail the pipeline on fixable HIGH/CRITICAL CVEs
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: payments:${{ github.sha }}
           severity: CRITICAL,HIGH
