@@ -1,0 +1,32 @@
+flowchart LR
+    Dev([Engineer]) -->|git push app/| GH
+    subgraph GH["GitHub Actions"]
+      direction TB
+      G1[Build + GHA cache] --> G2[Trivy scan] --> G3[Push to ECR<br/>via OIDC role] --> G4[Cosign sign<br/>+ SBOM] --> G5[Bump image tag<br/>in Git]
+    end
+    G3 --> ECR[(Amazon ECR<br/>immutable tags)]
+    G5 --> Repo[(Git repo<br/>desired state)]
+    subgraph AWS["AWS · VPC across 3 AZs"]
+      subgraph EKS["EKS cluster"]
+        Flux[Flux CD] --> Infra["Controllers<br/>Argo Rollouts · KEDA<br/>Prometheus · metrics-server"]
+        Flux --> App
+        subgraph App["payments namespace"]
+          RO["Argo Rollout<br/>canary 20→50→100%"] --> Pods["payments pods<br/>spread across AZs · PDB"]
+          AN["AnalysisTemplate<br/>success rate ≥ 99%"] -.->|abort / rollback| RO
+          KEDA["KEDA ScaledObject<br/>RPS + CPU"] -->|scale| RO
+        end
+        Prom[(Prometheus)] --> AN
+        Prom --> KEDA
+        Pods -->|/metrics| Prom
+        K6[k6 Job<br/>500 req/s] --> Pods
+      end
+      KP["Karpenter<br/>Spot + On-Demand<br/>consolidation"] -->|launch / remove| EC2[EC2 nodes]
+      Pods -.->|Pending pods| KP
+      SQS[(SQS interruption queue)] --> KP
+    end
+    Repo -->|reconcile| Flux
+    ECR -->|pull| Pods
+    TF[Terraform<br/>VPC · EKS · Karpenter IAM<br/>ECR · OIDC] -.-> AWS
+    classDef ext fill:#f3f3f3,stroke:#888,color:#111
+    classDef hot fill:#fff4e0,stroke:#d98a00,color:#111
+    class RO,AN,KEDA,KP hot

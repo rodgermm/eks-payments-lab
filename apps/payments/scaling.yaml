@@ -1,0 +1,38 @@
+# KEDA scales the Rollout on real traffic (RPS from Prometheus) and CPU.
+# Karpenter then adds nodes when pods go Pending.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: payments
+spec:
+  scaleTargetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: payments
+  minReplicaCount: 3
+  maxReplicaCount: 50
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 120
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://kube-prometheus-stack-prometheus.monitoring.svc:9090
+        query: sum(rate(http_requests_total{namespace="payments"}[1m]))
+        threshold: "100" # ~100 RPS per pod
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "70"
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: payments
+spec:
+  minAvailable: 2 # protects against Karpenter consolidation / node upgrades
+  selector:
+    matchLabels:
+      app: payments

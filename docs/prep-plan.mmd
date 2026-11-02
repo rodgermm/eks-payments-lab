@@ -1,0 +1,28 @@
+flowchart TD
+    S([START: 56 hours to interview]) --> D1
+    subgraph D1["DAY 1 · ~10h · Infrastructure & Scale"]
+      A1["2h · EKS Workshop<br/>Karpenter · HPA/KEDA · Pod Identity"] --> A2["3h · HANDS-ON<br/>make apply → EKS + Karpenter + Flux<br/>screenshot everything"]
+      A2 --> A3["1h · make loadtest<br/>k6 → watch pods + nodes scale<br/>note what broke"]
+      A3 --> A4["2h · Payments at scale<br/>ByteByteGo payment system<br/>idempotency · outbox · ledger"]
+      A4 --> A5["1h · re:Invent talk<br/>EKS at scale / multi-AZ resilience"]
+    end
+    D1 --> Q1{"Lab working?"}
+    Q1 -- No --> F1["Max 1h debug → else use<br/>diagrams + code as talking points"] --> D2
+    Q1 -- Yes --> D2
+    subgraph D2["DAY 2 · ~10h · CI/CD & System Design"]
+      B1["3h · Pipeline<br/>OIDC · cache · Trivy · Cosign<br/>Argo Rollouts canary"] --> B2["1h · Demo auto-rollback<br/>FAIL_RATE=0.3 → canary aborts"]
+      B2 --> B3["1h · Pipeline speed-up answer<br/>cache · parallel · affected-only"]
+      B3 --> B4["3h · System design drills, timed<br/>① Payments 5k TPS 99.99%<br/>② Monolith → EKS zero-downtime<br/>③ Bad deploy at peak"]
+      B4 --> B5["2h · Observability<br/>OTel · golden signals · SLOs<br/>alert on payment success rate"]
+    end
+    D2 --> X["make destroy · sleep early"]
+    X --> D3
+    subgraph D3["DAY 3 · ~5h · Stories & Mock"]
+      C1["6 STAR stories<br/>Standard Bank · Irdeto · CNAT<br/>incident · pipeline · SOC GLASS"] --> C2["1-min pitch<br/>payments + cloud-native + AI"]
+      C2 --> C3["Mock interview with Claude"]
+      C3 --> C4["4 questions for them"]
+    end
+    D3 --> R["Stop 2–3h before · rest"] --> E([INTERVIEW])
+    classDef day fill:#eef4ff,stroke:#3b6fd8,color:#111
+    classDef key fill:#fff4e0,stroke:#d98a00,color:#111
+    class A2,B2,B4,C3 key

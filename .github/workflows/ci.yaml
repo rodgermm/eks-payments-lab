@@ -1,0 +1,98 @@
+# PR:   build + scan (no AWS access, no push)
+# main: build + scan + push to ECR (OIDC) + sign (Cosign keyless) + GitOps tag bump
+# Flux sees the commit and Argo Rollouts runs the canary.
+#
+# Supply-chain hardening for real use: pin every third-party action to a full
+# commit SHA (tags can be moved), and enable Dependabot for actions.
+name: ci
+
+on:
+  pull_request:
+    paths: ["app/**", ".github/workflows/ci.yaml"]
+  push:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/ci.yaml"]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: eu-west-1
+  ECR_REPOSITORY: payments
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # tag bump commit
+      id-token: write   # OIDC to AWS + Cosign keyless
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # 1) Build once, load locally for scanning; GHA layer cache keeps rebuilds fast
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: app
+          load: true
+          tags: payments:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 2) Fail the pipeline on fixable HIGH/CRITICAL CVEs
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: payments:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      # ---- main only from here ----
+      - name: Configure AWS credentials (OIDC)
+        if: github.ref == 'refs/heads/main'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        if: github.ref == 'refs/heads/main'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push
+        if: github.ref == 'refs/heads/main'
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: app
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha
+          provenance: true
+          sbom: true
+
+      - uses: sigstore/cosign-installer@v3
+        if: github.ref == 'refs/heads/main'
+
+      - name: Sign image (keyless)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cosign sign --yes \
+            "${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}@${{ steps.push.outputs.digest }}"
+
+      # 3) GitOps: bump the image tag in Git; Flux deploys it
+      - name: Bump image tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          IMAGE="${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          sed -i -E "s#^(\s*image: ).*payments:.*#\1${IMAGE}#" apps/payments/rollout.yaml
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apps/payments/rollout.yaml
+          git commit -m "deploy(payments): ${GITHUB_SHA::7} [skip ci]" || exit 0
+          git push

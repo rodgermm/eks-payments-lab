@@ -1,0 +1,17 @@
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  amiSelectorTerms:
+    - alias: al2023@latest # prod: pin a specific AMI version and roll forward deliberately
+  role: eks-payments-lab-karpenter-node # matches node_iam_role_name in terraform/karpenter.tf
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: eks-payments-lab
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: eks-payments-lab
+  metadataOptions:
+    httpTokens: required # IMDSv2 only
+    httpPutResponseHopLimit: 1

@@ -1,0 +1,16 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infra-controllers
+    - name: infra-karpenter
+  interval: 5m
+  path: ./apps/payments
+  prune: true
+  wait: false
+  sourceRef:
+    kind: GitRepository
+    name: flux-system

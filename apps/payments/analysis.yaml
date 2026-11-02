@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+spec:
+  metrics:
+    - name: success-rate
+      interval: 30s
+      count: 4
+      failureLimit: 1
+      successCondition: len(result) == 0 || result[0] >= 0.99
+      provider:
+        prometheus:
+          address: http://kube-prometheus-stack-prometheus.monitoring.svc:9090
+          query: |
+            sum(rate(http_requests_total{namespace="payments", status!~"5.."}[1m]))
+            /
+            sum(rate(http_requests_total{namespace="payments"}[1m]))

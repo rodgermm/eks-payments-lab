@@ -1,0 +1,72 @@
+# Argo Rollout = Deployment + progressive delivery.
+# Canary: 20% -> analysis (Prometheus success rate) -> 50% -> 100%.
+# A failing analysis automatically aborts and rolls back.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: payments
+spec:
+  replicas: 3 # KEDA takes over once running
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: payments
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20
+        - pause: { duration: 60s }
+        - analysis:
+            templates:
+              - templateName: success-rate
+        - setWeight: 50
+        - pause: { duration: 60s }
+        - setWeight: 100
+  template:
+    metadata:
+      labels:
+        app: payments
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: payments
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: payments
+          # CI rewrites this line with the new immutable tag (git SHA)
+          image: ACCOUNT_ID.dkr.ecr.eu-west-1.amazonaws.com/payments:initial
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: FAIL_RATE # set to e.g. "0.3" in a commit to demo an auto-rollback
+              value: "0"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          lifecycle:
+            preStop: # let the load balancer drain before SIGTERM
+              exec:
+                command: ["sleep", "10"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
