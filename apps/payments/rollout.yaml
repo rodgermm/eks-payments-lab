@@ -64,7 +64,7 @@ spec:
           lifecycle:
             preStop: # let the load balancer drain before SIGTERM
               exec:
-                command: ["sleep", "10"]
+                command: ["sleep", "11"]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
