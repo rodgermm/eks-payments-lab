@@ -1,6 +1,6 @@
 CLUSTER     ?= eks-payments-lab
 REGION      ?= eu-west-1
-GITHUB_USER ?= your-github-user
+GITHUB_USER ?= rodgermm
 REPO        ?= eks-payments-lab
 TF          := terraform -chdir=terraform
 
